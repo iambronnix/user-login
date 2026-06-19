@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"sync"
@@ -68,8 +69,9 @@ func queryUsers(wg *sync.WaitGroup)[]string { //query user's "hash"
 	if queryErr != nil {
 		panic(queryErr)
 	}
-	
+	 
 	for results.Next() {//scan through the available hashes
+		
 		scanErr := results.Scan(&hash)
 		if scanErr != nil {
 			panic(scanErr)
@@ -168,9 +170,37 @@ func createTable() { //use to create a new table
 	}
 }
 
+
+
+func dupChecker(hash []string){
+	counts := make(map[string]int)
+	for _, hashString := range hash{
+	 writeErr := os.WriteFile("hashFile.txt",[]byte(hashString),0644)
+		if writeErr != nil{
+			fmt.Fprintf(os.Stderr,"\t%v\n",writeErr)
+		}
+	}
+	hashFile, openErr := os.Open("hashFile.txt")
+	if openErr != nil{
+		fmt.Fprintf(os.Stderr,"\t%v\n",openErr)
+		
+	}
+	input := bufio.NewScanner(hashFile)
+	for input.Scan(){
+		if eofErr := input.Err(); eofErr == io.EOF{
+			break
+		}
+		counts[input.Text()]++
+	}
+	for line, n := range counts{
+		if 1 <=n{
+		fmt.Printf("%d\t%s\n",n,line)
+		}
+	}
+		
+}
 func (newUser *User)finalFlow(dbHashes []string){
-	
-      if accountExist := newUser.checkUser(dbHashes);accountExist == true{
+	  if accountExist := newUser.checkUser(dbHashes);accountExist == true{
       fmt.Println("**********Account Exists************\nusername:",newUser.username)
        
       }else{
@@ -183,7 +213,13 @@ func (newUser *User)finalFlow(dbHashes []string){
 }
 
 func main() {
-	go spinnerWrapper(100 * time.Millisecond)//it does that magic thing
+	defer func(){//recover panics
+		if recoverErr := recover(); recoverErr!=nil{
+			fmt.Fprintf(os.Stderr, "%v\t\n",recoverErr)
+		}
+		
+	}()
+	go spinnerWrapper(200 * time.Millisecond)//it does that magic thing
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 	//dropTable() 
@@ -193,9 +229,11 @@ func main() {
 		username: <-loginName,
 		password: <-loginPassword,
 		}
+	
    dbHashes := queryUsers(wg)
-   wg.Wait()
-   newUser.finalFlow(dbHashes)      
+   newUser.finalFlow(dbHashes)   
+  // dupChecker(dbHashes)there's a logical bug in this function 
+  wg.Wait()
 	
 
 }
